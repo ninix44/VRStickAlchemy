@@ -34,7 +34,7 @@ public class ExampleAddonClient implements VisorAddon {
 
     @Override
     public @Nullable String getAddonPackagePath() {
-        return "org.vmstudio.snowballs.core.client";
+        return "org.vmstudio.stickalchemy.core.client";
     }
 
     @Override
