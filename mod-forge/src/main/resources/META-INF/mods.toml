@@ -1,0 +1,35 @@
+modLoader = "javafml"
+loaderVersion = "[46,)"
+license = "MIT"
+
+[[mods]]
+modId = "visor_example"
+version = "${version}"
+displayName = "VisorExample"
+authors = "PhoenixRa"
+displayTest = "NONE"
+description = '''
+The Example Addon for Visor
+
+'''
+
+[[dependencies.visor_example]]
+modId = "visor"
+mandatory = true
+versionRange = "[0.2.0-alpha,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.visor_example]]
+modId = "forge"
+mandatory = true
+versionRange = "[46,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.visor_example]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20,1.20.1]"
+ordering = "AFTER"
+side = "BOTH"

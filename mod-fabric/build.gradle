@@ -1,0 +1,88 @@
+plugins {
+    alias(libs.plugins.shadow)
+}
+
+architectury {
+    platformSetupLoomIde()
+    fabric()
+}
+
+loom {
+    accessWidenerPath = project(":mod-core").file("src/main/resources/mod.accesswidener")
+}
+
+configurations {
+    common
+    shadowCommon // Don't use shadow from the shadow plugin because we don't want IDEA to index this.
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentFabric.extendsFrom common
+}
+version = version+"-fabric"
+dependencies {
+    shadowCommon(project(path: ":mod-core", configuration: "transformProductionFabric")) { transitive false }
+    common(project(path: ":mod-core", configuration: "namedElements")) { transitive false }
+
+
+
+    compileOnly(project(path: ':mod-core', configuration: 'namedElements'))
+
+
+
+    String fabricApiVersion = "${libs.versions.fabric.api.get()}+${libs.versions.minecraftVersion.get()}";
+
+    modImplementation(libs.fabric.loader)
+    modApi(libs.architectury.lib) { exclude group: "net.fabricmc" exclude group: "net.fabricmc.fabric-api" }
+
+
+    modApi "net.fabricmc.fabric-api:fabric-api:$fabricApiVersion"
+
+
+
+
+    include(modImplementation(fabricApi.module("fabric-api-base",  fabricApiVersion)))
+    include(modImplementation(fabricApi.module("fabric-resource-loader-v0",  fabricApiVersion)))
+    include(modImplementation(fabricApi.module("fabric-command-api-v2",  fabricApiVersion)))
+}
+
+processResources {
+    inputs.property "version", parent.version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": parent.version
+    }
+}
+
+
+shadowJar {
+    exclude "architectury.common.json"
+    exclude "org.joml"
+    exclude "org.lwjgl"
+    exclude "org.slf4j"
+    duplicatesStrategy DuplicatesStrategy.EXCLUDE
+    configurations = [
+            project.configurations.shadowCommon
+    ]
+    archiveClassifier.set("dev")
+
+}
+
+remapJar {
+    injectAccessWidener = true
+    input.set shadowJar.archiveFile
+    dependsOn shadowJar
+    archiveClassifier.set('')
+}
+
+sourcesJar {
+    def commonSources = project(":mod-core").sourcesJar
+    dependsOn commonSources
+    from commonSources.archiveFile.map { zipTree(it) }
+}
+
+components.java {
+    withVariantsFromConfiguration(project.configurations.shadowRuntimeElements) {
+        skip()
+    }
+}
+
