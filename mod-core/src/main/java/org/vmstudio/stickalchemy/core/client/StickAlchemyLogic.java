@@ -6,7 +6,9 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Display.ItemDisplay;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -75,10 +77,14 @@ public class StickAlchemyLogic {
             return handPos;
         }
 
-        boolean isHoldingStick = mc.player.getItemInHand(mcHand).is(Items.STICK);
-        boolean isHoldingBottle = mc.player.getItemInHand(mcHand).is(Items.GLASS_BOTTLE);
-        boolean isEmpty = mc.player.getItemInHand(mcHand).isEmpty();
-        boolean isHoldingIngredient = !isHoldingStick && !isHoldingBottle && !isEmpty;
+        ItemStack itemInHand = mc.player.getItemInHand(mcHand);
+        boolean isHoldingStick = itemInHand.is(Items.STICK);
+        boolean isHoldingBottle = itemInHand.is(Items.GLASS_BOTTLE);
+        boolean isEmpty = itemInHand.isEmpty();
+
+        boolean isValidIngredient = PotionBrewing.isIngredient(itemInHand);
+
+        boolean isHoldingIngredient = !isHoldingStick && !isHoldingBottle && !isEmpty && isValidIngredient;
 
         double speed = handPos.distanceTo(lastPos);
 

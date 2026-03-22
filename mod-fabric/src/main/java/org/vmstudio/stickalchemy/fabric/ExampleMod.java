@@ -20,6 +20,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Display.ItemDisplay;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.item.alchemy.PotionUtils;
 import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.Level;
@@ -117,7 +118,7 @@ public class ExampleMod implements ModInitializer {
                 );
                 List<ItemDisplay> currentItems = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
 
-                if (currentItems.size() < 9 && !stack.isEmpty() && level.getBlockState(pos).is(Blocks.WATER_CAULDRON)) {
+                if (currentItems.size() < 9 && !stack.isEmpty() && PotionBrewing.isIngredient(stack) && level.getBlockState(pos).is(Blocks.WATER_CAULDRON)) {
                     ItemStack placedItem = stack.copy();
                     placedItem.setCount(1);
                     stack.shrink(1);
