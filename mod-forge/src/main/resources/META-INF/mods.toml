@@ -3,31 +3,31 @@ loaderVersion = "[46,)"
 license = "MIT"
 
 [[mods]]
-modId = "visor_example"
+modId = "stickalchemy"
 version = "${version}"
-displayName = "VisorExample"
-authors = "PhoenixRa"
+displayName = "VRStickAlchemy"
+authors = "Ninix"
 displayTest = "NONE"
 description = '''
-The Example Addon for Visor
+Stick Alchemy for Visor
 
 '''
 
-[[dependencies.visor_example]]
+[[dependencies.stickalchemy]]
 modId = "visor"
 mandatory = true
 versionRange = "[0.2.0-alpha,)"
 ordering = "AFTER"
 side = "BOTH"
 
-[[dependencies.visor_example]]
+[[dependencies.stickalchemy]]
 modId = "forge"
 mandatory = true
 versionRange = "[46,)"
 ordering = "AFTER"
 side = "BOTH"
 
-[[dependencies.visor_example]]
+[[dependencies.stickalchemy]]
 modId = "minecraft"
 mandatory = true
 versionRange = "[1.20,1.20.1]"

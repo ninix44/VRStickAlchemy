@@ -1,7 +1,7 @@
-package your.mod.example.core.mixin;
+package org.vmstudio.stickalchemy.core.mixin;
 
 import org.vmstudio.visor.api.ModLoader;
-import your.mod.example.core.common.VisorExample;
+import org.vmstudio.stickalchemy.core.common.VisorExample;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;

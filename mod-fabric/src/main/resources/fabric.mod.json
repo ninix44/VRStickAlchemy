@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "id": "visor_example",
+  "id": "stickalchemy",
   "version": "${version}",
 
-  "name": "VisorExample",
-  "description": "The Example Addon for Visor",
+  "name": "VRStickAlchemy",
+  "description": "Stick Alchemy for Visor",
   "authors": [
-    "PhoenixRa"
+    "Ninix"
   ],
   "license": "MIT",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "your.mod.example.fabric.ExampleMod"
+      "org.vmstudio.stickalchemy.fabric.ExampleMod"
     ]
   },
   "mixins": [
@@ -21,12 +21,10 @@
   "depends": {
     "fabricloader": ">=0.14.14",
     "minecraft": ["1.20", "1.20.1"],
-    "java": ">=17"
-  },
-  "breaks": {
-    "visor": "<0.2.0"
+    "java": ">=17",
+    "visor": "*"
   },
   "suggests": {
-    "another-mod": "*"
+    "sodium": ">=0.5.0"
   }
 }

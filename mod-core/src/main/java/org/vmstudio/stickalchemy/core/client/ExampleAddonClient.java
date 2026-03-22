@@ -1,9 +1,10 @@
-package your.mod.example.core.client;
+package org.vmstudio.stickalchemy.core.client;
 
 import org.vmstudio.visor.api.VisorAPI;
 import org.vmstudio.visor.api.common.addon.VisorAddon;
-import your.mod.example.core.client.overlays.VROverlayExample;
-import your.mod.example.core.common.VisorExample;
+import org.vmstudio.stickalchemy.core.client.overlays.VROverlayExample;
+import org.vmstudio.stickalchemy.core.client.overlays.VROverlayTemplateExample;
+import org.vmstudio.stickalchemy.core.common.VisorExample;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -20,6 +21,10 @@ public class ExampleAddonClient implements VisorAddon {
                                 new VROverlayExample(
                                         this,
                                         VROverlayExample.ID
+                                ),
+                                new VROverlayTemplateExample(
+                                        this,
+                                        VROverlayTemplateExample.ID
                                 )
                         )
                 );
@@ -27,17 +32,19 @@ public class ExampleAddonClient implements VisorAddon {
 
     @Override
     public @Nullable String getAddonPackagePath() {
-        return "your.mod.example.core.client";
+        return "org.vmstudio.stickalchemy.core.client";
     }
 
     @Override
     public @NotNull String getAddonId() {
         return VisorExample.MOD_ID;
     }
+
     @Override
     public @NotNull Component getAddonName() {
         return Component.literal(VisorExample.MOD_NAME);
     }
+
     @Override
     public String getModId() {
         return VisorExample.MOD_ID;

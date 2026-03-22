@@ -1,7 +1,7 @@
-package your.mod.example.core.server;
+package org.vmstudio.stickalchemy.core.server;
 
 import org.vmstudio.visor.api.common.addon.VisorAddon;
-import your.mod.example.core.common.VisorExample;
+import org.vmstudio.stickalchemy.core.common.VisorExample;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -14,7 +14,7 @@ public class ExampleAddonServer implements VisorAddon {
 
     @Override
     public @Nullable String getAddonPackagePath() {
-        return "your.mod.example.core.server";
+        return "org.vmstudio.stickalchemy.core.server";
     }
 
     @Override
