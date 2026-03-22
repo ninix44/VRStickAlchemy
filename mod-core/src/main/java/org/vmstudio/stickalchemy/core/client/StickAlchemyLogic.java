@@ -13,12 +13,13 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3fc;
+import org.joml.Vector3f;
 import org.vmstudio.visor.api.VisorAPI;
 import org.vmstudio.visor.api.client.player.VRLocalPlayer;
 import org.vmstudio.visor.api.client.player.pose.PlayerPoseClient;
 import org.vmstudio.visor.api.client.player.pose.PlayerPoseType;
 import org.vmstudio.visor.api.common.HandType;
+import org.vmstudio.visor.api.common.player.VRPose;
 
 import java.util.HashMap;
 import java.util.List;
@@ -58,8 +59,8 @@ public class StickAlchemyLogic {
         if (scoopCooldown > 0) scoopCooldown--;
         if (extractCooldown > 0) extractCooldown--;
 
-        lastMainPos = processHand(mc, poseTick.getMainHand().getPosition(), InteractionHand.MAIN_HAND, HandType.MAIN, true, lastMainPos);
-        lastOffPos = processHand(mc, poseTick.getOffhand().getPosition(), InteractionHand.OFF_HAND, HandType.OFFHAND, false, lastOffPos);
+        lastMainPos = processHand(mc, poseTick.getMainHand(), InteractionHand.MAIN_HAND, HandType.MAIN, true, lastMainPos);
+        lastOffPos = processHand(mc, poseTick.getOffhand(), InteractionHand.OFF_HAND, HandType.OFFHAND, false, lastOffPos);
     }
 
     private static void resetTimers(boolean isMain) {
@@ -67,15 +68,12 @@ public class StickAlchemyLogic {
         else offHandHoldTicks = 0;
     }
 
-    private static Vec3 processHand(Minecraft mc, Vector3fc handJoml, InteractionHand mcHand, HandType vrHand, boolean isMain, Vec3 lastPos) {
-        Vec3 handPos = new Vec3(
-            handJoml.x(),
-            handJoml.y(),
-            handJoml.z());
+    private static Vec3 processHand(Minecraft mc, VRPose handPose, InteractionHand mcHand, HandType vrHand, boolean isMain, Vec3 lastPos) {
+        Vec3 handPos = new Vec3(handPose.getPosition().x(), handPose.getPosition().y(), handPose.getPosition().z());
 
-        if (lastPos == null) {
-            return handPos;
-        }
+        Vector3f offset = new Vector3f(0, 0.43f, -0.25f);
+        Vector3f tipJoml = handPose.getCustomVector(offset).add(handPose.getPosition());
+        Vec3 stickTipPos = new Vec3(tipJoml.x(), tipJoml.y(), tipJoml.z());
 
         ItemStack itemInHand = mc.player.getItemInHand(mcHand);
         boolean isHoldingStick = itemInHand.is(Items.STICK);
@@ -86,7 +84,16 @@ public class StickAlchemyLogic {
 
         boolean isHoldingIngredient = !isHoldingStick && !isHoldingBottle && !isEmpty && isValidIngredient;
 
-        double speed = handPos.distanceTo(lastPos);
+        Vec3 activePos = isHoldingStick ? stickTipPos : handPos;
+
+        if (lastPos == null) {
+            return activePos;
+        }
+
+        double speed = activePos.distanceTo(lastPos);
+
+        AABB handBox = new AABB(handPos, handPos).inflate(0.05);
+        AABB stickBox = new AABB(stickTipPos, stickTipPos).inflate(0.02);
 
         if (isEmpty && (mc.options.keyUse.isDown() || mc.options.keyJump.isDown()) && extractCooldown <= 0) {
             AABB grabBox = new AABB(handPos, handPos).inflate(0.15);
@@ -96,13 +103,12 @@ public class StickAlchemyLogic {
                     VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 200f, 0.5f, 0.1f);
                     mc.player.playSound(SoundEvents.ITEM_PICKUP, 0.5f, 1.5f);
                     extractCooldown = 15;
-                    return handPos;
+                    return activePos;
                 }
             }
         }
 
-        BlockPos centerPos = BlockPos.containing(handPos);
-        AABB handBox = new AABB(handPos, handPos).inflate(0.05);
+        BlockPos centerPos = BlockPos.containing(activePos);
 
         for (int x = -1; x <= 1; x++) {
             for (int y = -1; y <= 1; y++) {
@@ -113,7 +119,12 @@ public class StickAlchemyLogic {
                     if (state.is(Blocks.WATER_CAULDRON)) {
                         AABB cauldronWaterSurface = new AABB(
                             targetPos.getX() + 0.15, targetPos.getY() + 0.3, targetPos.getZ() + 0.15,
-                            targetPos.getX() + 0.85, targetPos.getY() + 1.2, targetPos.getZ() + 0.85
+                            targetPos.getX() + 0.85, targetPos.getY() + 1.1, targetPos.getZ() + 0.85
+                        );
+
+                        AABB cauldronStirZone = new AABB(
+                            targetPos.getX() + 0.15, targetPos.getY() + 0.1, targetPos.getZ() + 0.15,
+                            targetPos.getX() + 0.85, targetPos.getY() + 0.9, targetPos.getZ() + 0.85
                         );
 
                         if (isHoldingIngredient && handBox.intersects(cauldronWaterSurface)) {
@@ -147,45 +158,41 @@ public class StickAlchemyLogic {
                                     resetTimers(isMain);
                                 }
                             }
-                            return handPos;
+                            return activePos;
                         }
 
-                        AABB cauldronStirZone = new AABB(
-                            targetPos.getX() - 0.2, targetPos.getY() + 0.3, targetPos.getZ() - 0.2,
-                            targetPos.getX() + 1.2, targetPos.getY() + 1.5, targetPos.getZ() + 1.2
-                        );
-
-                        if (handBox.intersects(cauldronStirZone)) {
-                            if (isHoldingStick) {
-                                if (speed > 0.005) {
-                                    int progress = stirProgress.getOrDefault(targetPos, 0) + 1;
-                                    stirProgress.put(targetPos, progress);
-
-                                    if (progress % 5 == 0) {
-                                        VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 150f, 0.3f, 0.05f);
-                                        mc.player.playSound(SoundEvents.WATER_AMBIENT, 0.5f, 1.0f + (mc.level.random.nextFloat() * 0.5f));
-                                        mc.level.addParticle(ParticleTypes.SPLASH,
-                                            targetPos.getX() + 0.5, targetPos.getY() + 0.9, targetPos.getZ() + 0.5,
-                                            (mc.level.random.nextDouble() - 0.5) * 0.2, 0.1, (mc.level.random.nextDouble() - 0.5) * 0.2);
-                                    }
-                                    if (progress >= 35) {
-                                        VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 400f, 1.0f, 0.4f);
-                                        mc.player.playSound(SoundEvents.SPLASH_POTION_BREAK, 1.0f, 1.0f);
-                                        stirProgress.remove(targetPos);
-                                        if (bridge != null) bridge.sendFinishStir(targetPos);
-                                    }
-                                }
-                                return handPos;
+                        if (isHoldingBottle && handBox.intersects(cauldronWaterSurface) && scoopCooldown <= 0) {
+                            if (bridge != null) {
+                                bridge.sendScoopPotion(targetPos, isMain);
+                                VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 200f, 0.5f, 0.1f);
+                                scoopCooldown = 20;
                             }
+                            return activePos;
+                        }
 
-                            if (isHoldingBottle && scoopCooldown <= 0) {
-                                if (bridge != null) {
-                                    bridge.sendScoopPotion(targetPos, isMain);
-                                    VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 200f, 0.5f, 0.1f);
-                                    scoopCooldown = 20;
+                        if (isHoldingStick && stickBox.intersects(cauldronStirZone)) {
+                            if (speed > 0.005) {
+                                int progress = stirProgress.getOrDefault(targetPos, 0) + 1;
+                                stirProgress.put(targetPos, progress);
+
+                                if (progress % 5 == 0) {
+                                    VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 150f, 0.3f, 0.05f);
+                                    mc.player.playSound(SoundEvents.WATER_AMBIENT, 0.5f, 1.0f + (mc.level.random.nextFloat() * 0.5f));
+
+                                    mc.level.addParticle(ParticleTypes.SPLASH,
+                                        stickTipPos.x + (mc.level.random.nextDouble() - 0.5) * 0.2,
+                                        stickTipPos.y,
+                                        stickTipPos.z + (mc.level.random.nextDouble() - 0.5) * 0.2,
+                                        (mc.level.random.nextDouble() - 0.5) * 0.2, 0.1, (mc.level.random.nextDouble() - 0.5) * 0.2);
                                 }
-                                return handPos;
+                                if (progress >= 35) {
+                                    VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 400f, 1.0f, 0.4f);
+                                    mc.player.playSound(SoundEvents.SPLASH_POTION_BREAK, 1.0f, 1.0f);
+                                    stirProgress.remove(targetPos);
+                                    if (bridge != null) bridge.sendFinishStir(targetPos);
+                                }
                             }
+                            return activePos;
                         }
                     }
                 }
@@ -193,6 +200,6 @@ public class StickAlchemyLogic {
         }
 
         resetTimers(isMain);
-        return handPos;
+        return activePos;
     }
 }
