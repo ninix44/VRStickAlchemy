@@ -15,24 +15,26 @@ public class ExampleAddonClient implements VisorAddon {
     @Override
     public void onAddonLoad() {
         VisorAPI.addonManager().getRegistries()
-                .overlays()
-                .registerComponents(
-                        List.of(
-                                new VROverlayExample(
-                                        this,
-                                        VROverlayExample.ID
-                                ),
-                                new VROverlayTemplateExample(
+            .overlays()
+            .registerComponents(
+                List.of(
+                    new VROverlayExample(
+                        this,
+                        VROverlayExample.ID
+                    )
+                                /*
+                                , new VROverlayTemplateExample(
                                         this,
                                         VROverlayTemplateExample.ID
                                 )
-                        )
-                );
+                                */
+                )
+            );
     }
 
     @Override
     public @Nullable String getAddonPackagePath() {
-        return "org.vmstudio.stickalchemy.core.client";
+        return "org.vmstudio.snowballs.core.client";
     }
 
     @Override

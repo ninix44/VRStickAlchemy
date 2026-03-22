@@ -29,20 +29,20 @@ public class VROverlayTemplateExample extends VROverlayTemplateScreen {
     public VROverlayTemplateExample(@NotNull VisorAddon owner, @NotNull String id) {
         super(owner, id);
         //if you want it to be enabled once created
-        setEnabled(true);
+        setEnabled(false); // true
 
     }
 
     @Override
     protected void onRender(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        guiGraphics.drawCenteredString(this.font, text,
-                width/2, height/2, AtumColor.WHITE.asInt());
+        // guiGraphics.drawCenteredString(this.font, text,
+        //       width/2, height/2, AtumColor.WHITE.asInt());
 
     }
 
     @Override
     protected boolean updateVisibility() {
-        return true;
+        return false; // true
     }
 
     @Override
