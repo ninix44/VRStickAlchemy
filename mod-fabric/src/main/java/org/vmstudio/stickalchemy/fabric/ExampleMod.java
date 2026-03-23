@@ -26,6 +26,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.item.alchemy.PotionUtils;
+import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LayeredCauldronBlock;
@@ -271,13 +272,37 @@ public class ExampleMod implements ModInitializer {
                 Level level = player.level();
                 BlockState state = level.getBlockState(pos);
 
-                if (AlchemyServerState.BREWED_CAULDRONS.containsKey(pos) && state.is(Blocks.WATER_CAULDRON)) {
-                    AlchemyServerState.CauldronData data = AlchemyServerState.BREWED_CAULDRONS.get(pos);
+                if (state.is(Blocks.WATER_CAULDRON)) {
                     InteractionHand hand = isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
                     ItemStack stack = player.getItemInHand(hand);
                     if (stack.is(Items.GLASS_BOTTLE)) {
                         stack.shrink(1);
-                        ItemStack potionToGive = data.potion.copy();
+                        ItemStack potionToGive;
+                        int waterLevel = state.getValue(LayeredCauldronBlock.LEVEL);
+
+                        if (AlchemyServerState.BREWED_CAULDRONS.containsKey(pos)) {
+                            AlchemyServerState.CauldronData data = AlchemyServerState.BREWED_CAULDRONS.get(pos);
+                            potionToGive = data.potion.copy();
+
+                            if (waterLevel > 1) {
+                                level.setBlock(pos, state.setValue(LayeredCauldronBlock.LEVEL, waterLevel - 1), 3);
+                                data.expectedWaterLevel = waterLevel - 1;
+                            } else {
+                                level.setBlock(pos, Blocks.CAULDRON.defaultBlockState(), 3);
+                                AlchemyServerState.BREWED_CAULDRONS.remove(pos);
+                                broadcastCauldronColor((ServerLevel) level, pos, -1);
+                            }
+                        }
+                        else {
+                            potionToGive = new ItemStack(Items.POTION);
+                            PotionUtils.setPotion(potionToGive, Potions.WATER);
+
+                            if (waterLevel > 1) {
+                                level.setBlock(pos, state.setValue(LayeredCauldronBlock.LEVEL, waterLevel - 1), 3);
+                            } else {
+                                level.setBlock(pos, Blocks.CAULDRON.defaultBlockState(), 3);
+                            }
+                        }
 
                         if (player.getItemInHand(hand).isEmpty()) {
                             player.setItemInHand(hand, potionToGive);
@@ -285,18 +310,6 @@ public class ExampleMod implements ModInitializer {
                             player.getInventory().add(potionToGive);
                         }
 
-                        int waterLevel = state.getValue(LayeredCauldronBlock.LEVEL);
-                        if (waterLevel > 1) {
-                            level.setBlock(pos, state.setValue(LayeredCauldronBlock.LEVEL, waterLevel - 1), 3);
-                            data.expectedWaterLevel = waterLevel - 1;
-                        } else {
-                            level.setBlock(pos, Blocks.CAULDRON.defaultBlockState(), 3);
-                            AlchemyServerState.BREWED_CAULDRONS.remove(pos);
-
-                            if (level instanceof ServerLevel sl) {
-                                broadcastCauldronColor(sl, pos, -1);
-                            }
-                        }
                         level.playSound(null, pos, SoundEvents.BOTTLE_FILL, SoundSource.BLOCKS, 1.0f, 1.0f);
                     }
                 }
