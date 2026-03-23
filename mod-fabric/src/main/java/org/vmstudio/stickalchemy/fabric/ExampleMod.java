@@ -4,7 +4,10 @@ import io.netty.buffer.Unpooled;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.rendering.v1.ColorProviderRegistry;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -12,6 +15,7 @@ import net.minecraft.nbt.FloatTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -21,6 +25,7 @@ import net.minecraft.world.entity.Display.ItemDisplay;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionBrewing;
+import net.minecraft.world.item.alchemy.PotionUtils;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LayeredCauldronBlock;
@@ -100,8 +105,50 @@ public class ExampleMod implements ModInitializer {
         }
     }
 
+    private void broadcastCauldronColor(ServerLevel level, BlockPos pos, int color) {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+        buf.writeBlockPos(pos);
+        buf.writeInt(color);
+        for (ServerPlayer p : level.players()) {
+            ServerPlayNetworking.send(p, AlchemyNetworking.SYNC_CAULDRON_COLOR_PACKET, buf);
+        }
+    }
+
     @Override
     public void onInitialize() {
+
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (server.getTickCount() % 10 == 0) {
+                for (AlchemyServerState.CauldronData data : AlchemyServerState.BREWED_CAULDRONS.values()) {
+                    BlockState state = data.level.getBlockState(data.pos);
+
+                    if (state.is(Blocks.WATER_CAULDRON)) {
+                        int currentLevel = state.getValue(LayeredCauldronBlock.LEVEL);
+
+                        if (currentLevel > data.expectedWaterLevel) {
+                            AlchemyServerState.BREWED_CAULDRONS.remove(data.pos);
+                            broadcastCauldronColor(data.level, data.pos, -1);
+                            data.level.playSound(null, data.pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.5f, 2.0f);
+                            continue;
+                        }
+
+                        int color = PotionUtils.getColor(data.potion);
+                        double r = (color >> 16 & 255) / 255.0;
+                        double g = (color >> 8 & 255) / 255.0;
+                        double b = (color & 255) / 255.0;
+
+                        data.level.sendParticles(ParticleTypes.ENTITY_EFFECT,
+                            data.pos.getX() + 0.5 + (data.level.random.nextDouble() - 0.5) * 0.5,
+                            data.pos.getY() + 0.8,
+                            data.pos.getZ() + 0.5 + (data.level.random.nextDouble() - 0.5) * 0.5,
+                            0, r, g, b, 1.0);
+                    } else {
+                        AlchemyServerState.BREWED_CAULDRONS.remove(data.pos);
+                        broadcastCauldronColor(data.level, data.pos, -1);
+                    }
+                }
+            }
+        });
 
         ServerPlayNetworking.registerGlobalReceiver(AlchemyNetworking.PLACE_INGREDIENT_PACKET, (server, player, handler, buf, responseSender) -> {
             BlockPos pos = buf.readBlockPos();
@@ -175,7 +222,8 @@ public class ExampleMod implements ModInitializer {
             BlockPos pos = buf.readBlockPos();
             server.execute(() -> {
                 Level level = player.level();
-                if (level.getBlockState(pos).is(Blocks.WATER_CAULDRON)) {
+                BlockState state = level.getBlockState(pos);
+                if (state.is(Blocks.WATER_CAULDRON)) {
                     AABB strictInnerCauldron = new AABB(
                         pos.getX() + 0.1, pos.getY(), pos.getZ() + 0.1,
                         pos.getX() + 0.9, pos.getY() + 1.0, pos.getZ() + 0.9
@@ -197,17 +245,19 @@ public class ExampleMod implements ModInitializer {
                         ItemStack resultPotion = PotionRecipeLogic.calculateResult(ingredients);
 
                         if (resultPotion != null) {
-                            AlchemyServerState.BREWED_CAULDRONS.put(pos, resultPotion);
-                            level.playSound(null, pos, SoundEvents.BREWING_STAND_BREW, SoundSource.BLOCKS, 1.0f, 1.0f);
                             if (level instanceof ServerLevel sl) {
+                                int initialLevel = state.getValue(LayeredCauldronBlock.LEVEL);
+                                AlchemyServerState.BREWED_CAULDRONS.put(pos, new AlchemyServerState.CauldronData(sl, pos, resultPotion, initialLevel));
                                 sl.sendParticles(ParticleTypes.WITCH, pos.getX() + 0.5, pos.getY() + 0.8, pos.getZ() + 0.5, 20, 0.2, 0.2, 0.2, 0.05);
+
+                                int color = PotionUtils.getColor(resultPotion);
+                                broadcastCauldronColor(sl, pos, color);
                             }
+                            level.playSound(null, pos, SoundEvents.BREWING_STAND_BREW, SoundSource.BLOCKS, 1.0f, 1.0f);
                         } else {
                             level.setBlock(pos, Blocks.CAULDRON.defaultBlockState(), 3);
                             level.playSound(null, pos, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 1.0f, 1.0f);
-                            if (level instanceof ServerLevel sl) {
-                                sl.sendParticles(ParticleTypes.LARGE_SMOKE, pos.getX() + 0.5, pos.getY() + 0.8, pos.getZ() + 0.5, 30, 0.3, 0.3, 0.3, 0.1);
-                            }
+                            if (level instanceof ServerLevel sl) sl.sendParticles(ParticleTypes.LARGE_SMOKE, pos.getX() + 0.5, pos.getY() + 0.8, pos.getZ() + 0.5, 30, 0.3, 0.3, 0.3, 0.1);
                         }
                     }
                 }
@@ -222,12 +272,12 @@ public class ExampleMod implements ModInitializer {
                 BlockState state = level.getBlockState(pos);
 
                 if (AlchemyServerState.BREWED_CAULDRONS.containsKey(pos) && state.is(Blocks.WATER_CAULDRON)) {
+                    AlchemyServerState.CauldronData data = AlchemyServerState.BREWED_CAULDRONS.get(pos);
                     InteractionHand hand = isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
                     ItemStack stack = player.getItemInHand(hand);
                     if (stack.is(Items.GLASS_BOTTLE)) {
                         stack.shrink(1);
-
-                        ItemStack potionToGive = AlchemyServerState.BREWED_CAULDRONS.get(pos).copy();
+                        ItemStack potionToGive = data.potion.copy();
 
                         if (player.getItemInHand(hand).isEmpty()) {
                             player.setItemInHand(hand, potionToGive);
@@ -238,9 +288,14 @@ public class ExampleMod implements ModInitializer {
                         int waterLevel = state.getValue(LayeredCauldronBlock.LEVEL);
                         if (waterLevel > 1) {
                             level.setBlock(pos, state.setValue(LayeredCauldronBlock.LEVEL, waterLevel - 1), 3);
+                            data.expectedWaterLevel = waterLevel - 1;
                         } else {
                             level.setBlock(pos, Blocks.CAULDRON.defaultBlockState(), 3);
                             AlchemyServerState.BREWED_CAULDRONS.remove(pos);
+
+                            if (level instanceof ServerLevel sl) {
+                                broadcastCauldronColor(sl, pos, -1);
+                            }
                         }
                         level.playSound(null, pos, SoundEvents.BOTTLE_FILL, SoundSource.BLOCKS, 1.0f, 1.0f);
                     }
@@ -256,6 +311,31 @@ public class ExampleMod implements ModInitializer {
             VisorAPI.registerAddon(
                     new ExampleAddonClient()
             );
+
+            ColorProviderRegistry.BLOCK.register((state, view, pos, tintIndex) -> {
+                if (pos != null && StickAlchemyLogic.CAULDRON_COLORS.containsKey(pos)) {
+                    return StickAlchemyLogic.CAULDRON_COLORS.get(pos);
+                }
+                return view != null ? BiomeColors.getAverageWaterColor(view, pos) : -1;
+            }, Blocks.WATER_CAULDRON);
+
+            ClientPlayNetworking.registerGlobalReceiver(AlchemyNetworking.SYNC_CAULDRON_COLOR_PACKET, (client, handler, buf, responseSender) -> {
+                BlockPos pos = buf.readBlockPos();
+                int color = buf.readInt();
+                client.execute(() -> {
+                    if (color == -1) {
+                        StickAlchemyLogic.CAULDRON_COLORS.remove(pos);
+                    } else {
+                        StickAlchemyLogic.CAULDRON_COLORS.put(pos, color);
+                    }
+
+                    if (client.level != null) {
+                        BlockState state = client.level.getBlockState(pos);
+                        client.level.sendBlockUpdated(pos, state, state, 8);
+                        client.levelRenderer.blockChanged(client.level, pos, state, state, 8);
+                    }
+                });
+            });
 
             StickAlchemyLogic.bridge = new StickAlchemyLogic.NetworkBridge() {
 

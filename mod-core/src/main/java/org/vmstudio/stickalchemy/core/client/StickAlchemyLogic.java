@@ -36,7 +36,10 @@ public class StickAlchemyLogic {
 
     public static NetworkBridge bridge;
 
+    public static final Map<BlockPos, Integer> CAULDRON_COLORS = new HashMap<>();
+
     private static final Map<BlockPos, Integer> stirProgress = new HashMap<>();
+
     private static Vec3 lastMainPos = null;
     private static Vec3 lastOffPos = null;
 
