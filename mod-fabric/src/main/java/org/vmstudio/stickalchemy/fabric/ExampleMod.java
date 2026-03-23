@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.ColorProviderRegistry;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.core.BlockPos;
@@ -22,6 +23,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Display.ItemDisplay;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionBrewing;
@@ -46,6 +48,27 @@ import java.util.Comparator;
 import java.util.List;
 
 public class ExampleMod implements ModInitializer {
+
+    public static void dropCauldronIngredients(Level level, BlockPos pos) {
+        AABB strictInnerCauldron = new AABB(
+            pos.getX(), pos.getY(), pos.getZ(),
+            pos.getX() + 1.0, pos.getY() + 1.0, pos.getZ() + 1.0
+        );
+        List<ItemDisplay> displays = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+
+        for (ItemDisplay display : displays) {
+            CompoundTag tag = new CompoundTag();
+            display.saveWithoutId(tag);
+            if (tag.contains("item")) {
+                ItemStack stack = ItemStack.of(tag.getCompound("item"));
+                if (!stack.isEmpty()) {
+                    ItemEntity drop = new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, stack);
+                    level.addFreshEntity(drop);
+                }
+            }
+            display.discard();
+        }
+    }
 
     public static void updateCauldronGrid(Level level, BlockPos pos) {
         AABB strictInnerCauldron = new AABB(
@@ -117,6 +140,13 @@ public class ExampleMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+
+        PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
+            if (state.is(Blocks.WATER_CAULDRON)) {
+                dropCauldronIngredients(world, pos);
+            }
+            return true;
+        });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (server.getTickCount() % 10 == 0) {
@@ -191,31 +221,37 @@ public class ExampleMod implements ModInitializer {
         });
 
         ServerPlayNetworking.registerGlobalReceiver(AlchemyNetworking.EXTRACT_INGREDIENT_PACKET, (server, player, handler, buf, responseSender) -> {
-            int entityId = buf.readInt();
+            BlockPos pos = buf.readBlockPos();
             boolean isMainHand = buf.readBoolean();
-            server.execute(() -> {
-                Entity entity = player.level().getEntity(entityId);
-                if (entity instanceof ItemDisplay display && display.getTags().contains("alchemy_ingredient")) {
-                    InteractionHand hand = isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
 
-                    ItemStack recoveredItem = ItemStack.EMPTY;
+            server.execute(() -> {
+                Level level = player.level();
+                InteractionHand hand = isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+
+                AABB strictInnerCauldron = new AABB(
+                    pos.getX(), pos.getY(), pos.getZ(),
+                    pos.getX() + 1.0, pos.getY() + 1.0, pos.getZ() + 1.0
+                );
+
+                List<ItemDisplay> displays = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+
+                for (ItemDisplay display : displays) {
                     CompoundTag tag = new CompoundTag();
                     display.saveWithoutId(tag);
                     if (tag.contains("item")) {
-                        recoveredItem = ItemStack.of(tag.getCompound("item"));
-                    }
-
-                    if (!recoveredItem.isEmpty()) {
-                        if (player.getItemInHand(hand).isEmpty()) {
-                            player.setItemInHand(hand, recoveredItem);
-                        } else {
-                            player.getInventory().add(recoveredItem);
+                        ItemStack recoveredItem = ItemStack.of(tag.getCompound("item"));
+                        if (!recoveredItem.isEmpty()) {
+                            if (player.getItemInHand(hand).isEmpty()) {
+                                player.setItemInHand(hand, recoveredItem);
+                            } else if (!player.getInventory().add(recoveredItem)) {
+                                ItemEntity drop = new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, recoveredItem);
+                                level.addFreshEntity(drop);
+                            }
                         }
                     }
-                    BlockPos pos = display.blockPosition();
                     display.discard();
-                    updateCauldronGrid(player.level(), pos);
                 }
+                updateCauldronGrid(level, pos);
             });
         });
 
@@ -376,9 +412,9 @@ public class ExampleMod implements ModInitializer {
                 }
 
                 @Override
-                public void sendExtractIngredient(int entityId, boolean isMainHand) {
+                public void sendExtractIngredient(BlockPos pos, boolean isMainHand) {
                     FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-                    buf.writeInt(entityId);
+                    buf.writeBlockPos(pos);
                     buf.writeBoolean(isMainHand);
                     ClientPlayNetworking.send(AlchemyNetworking.EXTRACT_INGREDIENT_PACKET, buf);
                 }

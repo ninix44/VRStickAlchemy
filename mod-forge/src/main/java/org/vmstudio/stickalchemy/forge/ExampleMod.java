@@ -14,6 +14,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.Display.ItemDisplay;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -28,6 +29,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraftforge.client.event.RegisterColorHandlersEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.network.NetworkEvent;
@@ -60,6 +62,27 @@ public class ExampleMod {
     );
 
     private static int serverTicks = 0;
+
+    public static void dropCauldronIngredients(Level level, BlockPos pos) {
+        AABB strictInnerCauldron = new AABB(
+            pos.getX(), pos.getY(), pos.getZ(),
+            pos.getX() + 1.0, pos.getY() + 1.0, pos.getZ() + 1.0
+        );
+        List<ItemDisplay> displays = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+
+        for (ItemDisplay display : displays) {
+            CompoundTag tag = new CompoundTag();
+            display.saveWithoutId(tag);
+            if (tag.contains("item")) {
+                ItemStack stack = ItemStack.of(tag.getCompound("item"));
+                if (!stack.isEmpty()) {
+                    ItemEntity drop = new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, stack);
+                    level.addFreshEntity(drop);
+                }
+            }
+            display.discard();
+        }
+    }
 
     public static void updateCauldronGrid(Level level, BlockPos pos) {
         AABB strictInnerCauldron = new AABB(
@@ -147,6 +170,7 @@ public class ExampleMod {
             SyncCauldronColorPacket::handle);
 
         MinecraftForge.EVENT_BUS.addListener(this::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(this::onBlockBreak);
 
         if (!ModLoader.get().isDedicatedServer()) {
             FMLJavaModLoadingContext.get().getModEventBus().addListener((RegisterColorHandlersEvent.Block event) -> {
@@ -171,14 +195,13 @@ public class ExampleMod {
                 }
 
                 @Override
-
                 public void sendPlaceIngredient(BlockPos pos, boolean isMainHand) {
                     CHANNEL.sendToServer(new PlaceIngredientPacket(pos, isMainHand));
                 }
 
                 @Override
-                public void sendExtractIngredient(int entityId, boolean isMainHand) {
-                    CHANNEL.sendToServer(new ExtractIngredientPacket(entityId, isMainHand));
+                public void sendExtractIngredient(BlockPos pos, boolean isMainHand) {
+                    CHANNEL.sendToServer(new ExtractIngredientPacket(pos, isMainHand));
                 }
             };
 
@@ -193,6 +216,12 @@ public class ExampleMod {
             VisorAPI.registerAddon(
                     new ExampleAddonClient()
             );
+        }
+    }
+
+    private void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getState().is(Blocks.WATER_CAULDRON)) {
+            dropCauldronIngredients((Level) event.getLevel(), event.getPos());
         }
     }
 
@@ -324,22 +353,22 @@ public class ExampleMod {
     }
 
     public static class ExtractIngredientPacket {
-        private final int entityId;
+        private final BlockPos pos;
         private final boolean isMainHand;
 
-        public ExtractIngredientPacket(int entityId, boolean isMainHand) {
-            this.entityId = entityId;
+        public ExtractIngredientPacket(BlockPos pos, boolean isMainHand) {
+            this.pos = pos;
             this.isMainHand = isMainHand;
         }
 
         public static void encode(ExtractIngredientPacket msg, FriendlyByteBuf buf) {
-            buf.writeInt(msg.entityId);
+            buf.writeBlockPos(msg.pos);
             buf.writeBoolean(msg.isMainHand);
         }
 
         public static ExtractIngredientPacket decode(FriendlyByteBuf buf) {
             return new ExtractIngredientPacket(
-                buf.readInt(),
+                buf.readBlockPos(),
                 buf.readBoolean());
         }
 
@@ -347,21 +376,32 @@ public class ExampleMod {
             ctx.get().enqueueWork(() -> {
                 var player = ctx.get().getSender();
                 if (player == null) return;
-                Entity entity = player.level().getEntity(msg.entityId);
-                if (entity instanceof ItemDisplay display && display.getTags().contains("alchemy_ingredient")) {
-                    InteractionHand hand = msg.isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
-                    ItemStack recoveredItem = ItemStack.EMPTY;
+                Level level = player.level();
+                InteractionHand hand = msg.isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+                AABB strictInnerCauldron = new AABB(
+                    msg.pos.getX(), msg.pos.getY(), msg.pos.getZ(),
+                    msg.pos.getX() + 1.0, msg.pos.getY() + 1.0, msg.pos.getZ() + 1.0
+                );
+
+                List<ItemDisplay> displays = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+
+                for (ItemDisplay display : displays) {
                     CompoundTag tag = new CompoundTag();
                     display.saveWithoutId(tag);
-                    if (tag.contains("item")) { recoveredItem = ItemStack.of(tag.getCompound("item")); }
-                    if (!recoveredItem.isEmpty()) {
-                        if (player.getItemInHand(hand).isEmpty()) player.setItemInHand(hand, recoveredItem);
-                        else player.getInventory().add(recoveredItem);
+                    if (tag.contains("item")) {
+                        ItemStack recoveredItem = ItemStack.of(tag.getCompound("item"));
+                        if (!recoveredItem.isEmpty()) {
+                            if (player.getItemInHand(hand).isEmpty()) {
+                                player.setItemInHand(hand, recoveredItem);
+                            } else if (!player.getInventory().add(recoveredItem)) {
+                                ItemEntity drop = new ItemEntity(level, msg.pos.getX() + 0.5, msg.pos.getY() + 1.0, msg.pos.getZ() + 0.5, recoveredItem);
+                                level.addFreshEntity(drop);
+                            }
+                        }
                     }
-                    BlockPos pos = display.blockPosition();
                     display.discard();
-                    updateCauldronGrid(player.level(), pos);
                 }
+                updateCauldronGrid(level, msg.pos);
             });
             ctx.get().setPacketHandled(true);
         }

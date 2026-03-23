@@ -31,7 +31,7 @@ public class StickAlchemyLogic {
         void sendFinishStir(BlockPos pos);
         void sendScoopPotion(BlockPos pos, boolean isMainHand);
         void sendPlaceIngredient(BlockPos pos, boolean isMainHand);
-        void sendExtractIngredient(int entityId, boolean isMainHand);
+        void sendExtractIngredient(BlockPos pos, boolean isMainHand);
     }
 
     public static NetworkBridge bridge;
@@ -98,19 +98,6 @@ public class StickAlchemyLogic {
         AABB handBox = new AABB(handPos, handPos).inflate(0.05);
         AABB stickBox = new AABB(stickTipPos, stickTipPos).inflate(0.02);
 
-        if (isEmpty && (mc.options.keyUse.isDown() || mc.options.keyJump.isDown()) && extractCooldown <= 0) {
-            AABB grabBox = new AABB(handPos, handPos).inflate(0.15);
-            for (ItemDisplay item : mc.level.getEntitiesOfClass(ItemDisplay.class, grabBox)) {
-                if (item.getTags().contains("alchemy_ingredient")) {
-                    if (bridge != null) bridge.sendExtractIngredient(item.getId(), isMain);
-                    VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 200f, 0.5f, 0.1f);
-                    mc.player.playSound(SoundEvents.ITEM_PICKUP, 0.5f, 1.5f);
-                    extractCooldown = 15;
-                    return activePos;
-                }
-            }
-        }
-
         BlockPos centerPos = BlockPos.containing(activePos);
 
         for (int x = -1; x <= 1; x++) {
@@ -129,6 +116,20 @@ public class StickAlchemyLogic {
                             targetPos.getX() + 0.15, targetPos.getY() + 0.1, targetPos.getZ() + 0.15,
                             targetPos.getX() + 0.85, targetPos.getY() + 0.9, targetPos.getZ() + 0.85
                         );
+
+                        if (isEmpty && handBox.intersects(cauldronWaterSurface) && extractCooldown <= 0) {
+                            if (mc.options.keyUse.isDown() || mc.options.keyJump.isDown()) {
+                                if (bridge != null) bridge.sendExtractIngredient(targetPos, isMain);
+                                VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 300f, 0.5f, 0.1f);
+                                mc.player.playSound(SoundEvents.ITEM_PICKUP, 1.0f, 1.5f);
+
+                                for(int i = 0; i < 5; i++) {
+                                    mc.level.addParticle(ParticleTypes.POOF, targetPos.getX() + 0.5, targetPos.getY() + 0.9, targetPos.getZ() + 0.5, 0, 0.05, 0);
+                                }
+                                extractCooldown = 20;
+                                return activePos;
+                            }
+                        }
 
                         if (isHoldingIngredient && handBox.intersects(cauldronWaterSurface)) {
                             AABB strictInnerCauldron = new AABB(
