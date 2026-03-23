@@ -21,8 +21,6 @@ import net.minecraft.world.entity.Display.ItemDisplay;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionBrewing;
-import net.minecraft.world.item.alchemy.PotionUtils;
-import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LayeredCauldronBlock;
@@ -35,7 +33,9 @@ import org.vmstudio.stickalchemy.core.client.StickAlchemyLogic;
 import org.vmstudio.stickalchemy.core.common.AlchemyNetworking;
 import org.vmstudio.stickalchemy.core.server.AlchemyServerState;
 import org.vmstudio.stickalchemy.core.server.ExampleAddonServer;
+import org.vmstudio.stickalchemy.core.server.PotionRecipeLogic;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -183,12 +183,31 @@ public class ExampleMod implements ModInitializer {
                     List<ItemDisplay> items = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
 
                     if (!items.isEmpty()) {
-                        items.forEach(Entity::discard);
-                        AlchemyServerState.BREWED_CAULDRONS.add(pos);
-                        level.playSound(null, pos, SoundEvents.BREWING_STAND_BREW, SoundSource.BLOCKS, 1.0f, 1.0f);
-                        if (level instanceof ServerLevel sl) {
-                            sl.sendParticles(ParticleTypes.WITCH,
-                                pos.getX() + 0.5, pos.getY() + 0.8, pos.getZ() + 0.5, 20, 0.2, 0.2, 0.2, 0.05);
+                        List<ItemStack> ingredients = new ArrayList<>();
+
+                        for(ItemDisplay display : items) {
+                            CompoundTag tag = new CompoundTag();
+                            display.saveWithoutId(tag);
+                            if (tag.contains("item")) {
+                                ingredients.add(ItemStack.of(tag.getCompound("item")));
+                            }
+                            display.discard();
+                        }
+
+                        ItemStack resultPotion = PotionRecipeLogic.calculateResult(ingredients);
+
+                        if (resultPotion != null) {
+                            AlchemyServerState.BREWED_CAULDRONS.put(pos, resultPotion);
+                            level.playSound(null, pos, SoundEvents.BREWING_STAND_BREW, SoundSource.BLOCKS, 1.0f, 1.0f);
+                            if (level instanceof ServerLevel sl) {
+                                sl.sendParticles(ParticleTypes.WITCH, pos.getX() + 0.5, pos.getY() + 0.8, pos.getZ() + 0.5, 20, 0.2, 0.2, 0.2, 0.05);
+                            }
+                        } else {
+                            level.setBlock(pos, Blocks.CAULDRON.defaultBlockState(), 3);
+                            level.playSound(null, pos, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 1.0f, 1.0f);
+                            if (level instanceof ServerLevel sl) {
+                                sl.sendParticles(ParticleTypes.LARGE_SMOKE, pos.getX() + 0.5, pos.getY() + 0.8, pos.getZ() + 0.5, 30, 0.3, 0.3, 0.3, 0.1);
+                            }
                         }
                     }
                 }
@@ -202,17 +221,18 @@ public class ExampleMod implements ModInitializer {
                 Level level = player.level();
                 BlockState state = level.getBlockState(pos);
 
-                if (AlchemyServerState.BREWED_CAULDRONS.contains(pos) && state.is(Blocks.WATER_CAULDRON)) {
+                if (AlchemyServerState.BREWED_CAULDRONS.containsKey(pos) && state.is(Blocks.WATER_CAULDRON)) {
                     InteractionHand hand = isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
                     ItemStack stack = player.getItemInHand(hand);
                     if (stack.is(Items.GLASS_BOTTLE)) {
                         stack.shrink(1);
-                        ItemStack potion = new ItemStack(Items.POTION);
-                        PotionUtils.setPotion(potion, Potions.HEALING);
+
+                        ItemStack potionToGive = AlchemyServerState.BREWED_CAULDRONS.get(pos).copy();
+
                         if (player.getItemInHand(hand).isEmpty()) {
-                            player.setItemInHand(hand, potion);
+                            player.setItemInHand(hand, potionToGive);
                         } else {
-                            player.getInventory().add(potion);
+                            player.getInventory().add(potionToGive);
                         }
 
                         int waterLevel = state.getValue(LayeredCauldronBlock.LEVEL);

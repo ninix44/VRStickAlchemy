@@ -1,9 +1,10 @@
 package org.vmstudio.stickalchemy.core.server;
 
 import net.minecraft.core.BlockPos;
-import java.util.HashSet;
-import java.util.Set;
+import net.minecraft.world.item.ItemStack;
+import java.util.HashMap;
+import java.util.Map;
 
 public class AlchemyServerState {
-    public static final Set<BlockPos> BREWED_CAULDRONS = new HashSet<>();
+    public static final Map<BlockPos, ItemStack> BREWED_CAULDRONS = new HashMap<>();
 }
