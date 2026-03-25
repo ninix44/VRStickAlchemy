@@ -41,6 +41,7 @@ import org.vmstudio.visor.api.VisorAPI;
 import org.vmstudio.stickalchemy.core.client.ExampleAddonClient;
 import org.vmstudio.stickalchemy.core.client.StickAlchemyLogic;
 import org.vmstudio.stickalchemy.core.common.AlchemyNetworking;
+import org.vmstudio.stickalchemy.core.common.CauldronHeatLogic;
 import org.vmstudio.stickalchemy.core.common.VisorExample;
 import org.vmstudio.stickalchemy.core.server.AlchemyServerState;
 import org.vmstudio.stickalchemy.core.server.ExampleAddonServer;
@@ -329,7 +330,13 @@ public class ExampleMod {
                 );
                 List<ItemDisplay> currentItems = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
 
-                if (currentItems.size() < 9 && !stack.isEmpty() && PotionBrewing.isIngredient(stack) && level.getBlockState(msg.pos).is(Blocks.WATER_CAULDRON)) {
+                BlockState cauldronState = level.getBlockState(msg.pos);
+
+                if (currentItems.size() < 9
+                    && !stack.isEmpty()
+                    && PotionBrewing.isIngredient(stack)
+                    && CauldronHeatLogic.isFullWaterCauldron(cauldronState)
+                    && CauldronHeatLogic.isHeated(level, msg.pos)) {
                     ItemStack placedItem = stack.copy(); placedItem.setCount(1); stack.shrink(1);
                     ItemDisplay display = EntityType.ITEM_DISPLAY.create(level);
                     if (display != null) {
@@ -428,7 +435,7 @@ public class ExampleMod {
                 if (player == null) return;
                 Level level = player.level();
                 BlockState state = level.getBlockState(msg.pos);
-                if (state.is(Blocks.WATER_CAULDRON)) {
+                if (state.is(Blocks.WATER_CAULDRON) && CauldronHeatLogic.isHeated(level, msg.pos)) {
                     AABB strictInnerCauldron = new AABB(msg.pos.getX() + 0.1, msg.pos.getY(), msg.pos.getZ() + 0.1, msg.pos.getX() + 0.9, msg.pos.getY() + 1.0, msg.pos.getZ() + 0.9);
                     List<ItemDisplay> items = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
                     if (!items.isEmpty()) {
@@ -490,6 +497,15 @@ public class ExampleMod {
                 Level level = player.level();
                 BlockState state = level.getBlockState(msg.pos);
                 if (state.is(Blocks.WATER_CAULDRON)) {
+                    AABB strictInnerCauldron = new AABB(
+                        msg.pos.getX() + 0.1, msg.pos.getY(), msg.pos.getZ() + 0.1,
+                        msg.pos.getX() + 0.9, msg.pos.getY() + 1.0, msg.pos.getZ() + 0.9
+                    );
+                    List<ItemDisplay> currentItems = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+                    if (!currentItems.isEmpty()) {
+                        return;
+                    }
+
                     InteractionHand hand = msg.isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
                     ItemStack stack = player.getItemInHand(hand);
                     if (stack.is(Items.GLASS_BOTTLE)) {
@@ -532,3 +548,8 @@ public class ExampleMod {
         }
     }
 }
+
+
+
+
+

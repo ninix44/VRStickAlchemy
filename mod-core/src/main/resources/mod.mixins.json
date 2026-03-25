@@ -9,5 +9,7 @@
   ],
   "minVersion": "0.8.4",
   "mixins": [
+    "CampfireBlockEntityMixin",
+    "CampfireParticleTickMixin"
   ]
 }

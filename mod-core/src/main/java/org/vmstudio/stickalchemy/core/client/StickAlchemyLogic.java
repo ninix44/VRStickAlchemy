@@ -20,10 +20,13 @@ import org.vmstudio.visor.api.client.player.pose.PlayerPoseClient;
 import org.vmstudio.visor.api.client.player.pose.PlayerPoseType;
 import org.vmstudio.visor.api.common.HandType;
 import org.vmstudio.visor.api.common.player.VRPose;
+import org.vmstudio.stickalchemy.core.common.CauldronHeatLogic;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class StickAlchemyLogic {
 
@@ -45,6 +48,7 @@ public class StickAlchemyLogic {
 
     private static int scoopCooldown = 0;
     private static int extractCooldown = 0;
+    private static int ambientBoilSoundCooldown = 0;
 
     private static int mainHandHoldTicks = 0;
     private static int offHandHoldTicks = 0;
@@ -54,16 +58,21 @@ public class StickAlchemyLogic {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null || mc.isPaused() || mc.screen != null) return;
 
+        if (scoopCooldown > 0) scoopCooldown--;
+        if (extractCooldown > 0) extractCooldown--;
+        if (ambientBoilSoundCooldown > 0) ambientBoilSoundCooldown--;
+
+        tickAmbientBoiling(mc);
+
         VRLocalPlayer vrPlayer = VisorAPI.client().getVRLocalPlayer();
         if (vrPlayer == null || !VisorAPI.clientState().playMode().canPlayVR()) return;
 
         PlayerPoseClient poseTick = vrPlayer.getPoseData(PlayerPoseType.TICK);
 
-        if (scoopCooldown > 0) scoopCooldown--;
-        if (extractCooldown > 0) extractCooldown--;
+        Set<BlockPos> heatedCauldronsThisTick = new HashSet<>();
 
-        lastMainPos = processHand(mc, poseTick.getMainHand(), InteractionHand.MAIN_HAND, HandType.MAIN, true, lastMainPos);
-        lastOffPos = processHand(mc, poseTick.getOffhand(), InteractionHand.OFF_HAND, HandType.OFFHAND, false, lastOffPos);
+        lastMainPos = processHand(mc, poseTick.getMainHand(), InteractionHand.MAIN_HAND, HandType.MAIN, true, lastMainPos, heatedCauldronsThisTick);
+        lastOffPos = processHand(mc, poseTick.getOffhand(), InteractionHand.OFF_HAND, HandType.OFFHAND, false, lastOffPos, heatedCauldronsThisTick);
     }
 
     private static void resetTimers(boolean isMain) {
@@ -71,7 +80,7 @@ public class StickAlchemyLogic {
         else offHandHoldTicks = 0;
     }
 
-    private static Vec3 processHand(Minecraft mc, VRPose handPose, InteractionHand mcHand, HandType vrHand, boolean isMain, Vec3 lastPos) {
+    private static Vec3 processHand(Minecraft mc, VRPose handPose, InteractionHand mcHand, HandType vrHand, boolean isMain, Vec3 lastPos, Set<BlockPos> heatedCauldronsThisTick) {
         Vec3 handPos = new Vec3(handPose.getPosition().x(), handPose.getPosition().y(), handPose.getPosition().z());
 
         Vector3f offset = new Vector3f(0, 0.43f, -0.25f);
@@ -107,6 +116,13 @@ public class StickAlchemyLogic {
                     BlockState state = mc.level.getBlockState(targetPos);
 
                     if (state.is(Blocks.WATER_CAULDRON)) {
+                        boolean isHeated = CauldronHeatLogic.isHeated(mc.level, targetPos);
+                        boolean isFullWater = CauldronHeatLogic.isFullWaterCauldron(state);
+
+                        if (isHeated && heatedCauldronsThisTick.add(targetPos)) {
+                            spawnBoilingEffects(mc, targetPos);
+                        }
+
                         AABB cauldronWaterSurface = new AABB(
                             targetPos.getX() + 0.15, targetPos.getY() + 0.3, targetPos.getZ() + 0.15,
                             targetPos.getX() + 0.85, targetPos.getY() + 1.1, targetPos.getZ() + 0.85
@@ -132,6 +148,11 @@ public class StickAlchemyLogic {
                         }
 
                         if (isHoldingIngredient && handBox.intersects(cauldronWaterSurface)) {
+                            if (!isHeated || !isFullWater) {
+                                resetTimers(isMain);
+                                return activePos;
+                            }
+
                             AABB strictInnerCauldron = new AABB(
                                 targetPos.getX() + 0.1, targetPos.getY(), targetPos.getZ() + 0.1,
                                 targetPos.getX() + 0.9, targetPos.getY() + 1.0, targetPos.getZ() + 0.9
@@ -166,6 +187,16 @@ public class StickAlchemyLogic {
                         }
 
                         if (isHoldingBottle && handBox.intersects(cauldronWaterSurface) && scoopCooldown <= 0) {
+                            AABB strictInnerCauldron = new AABB(
+                                targetPos.getX(), targetPos.getY(), targetPos.getZ(),
+                                targetPos.getX() + 1.0, targetPos.getY() + 1.0, targetPos.getZ() + 1.0
+                            );
+                            List<ItemDisplay> currentItems = mc.level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+
+                            if (!currentItems.isEmpty()) {
+                                return activePos;
+                            }
+
                             if (bridge != null) {
                                 bridge.sendScoopPotion(targetPos, isMain);
                                 VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 200f, 0.5f, 0.1f);
@@ -191,7 +222,6 @@ public class StickAlchemyLogic {
                                 }
                                 if (progress >= 35) {
                                     VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 400f, 1.0f, 0.4f);
-                                    mc.player.playSound(SoundEvents.SPLASH_POTION_BREAK, 1.0f, 1.0f);
                                     stirProgress.remove(targetPos);
                                     if (bridge != null) bridge.sendFinishStir(targetPos);
                                 }
@@ -206,4 +236,71 @@ public class StickAlchemyLogic {
         resetTimers(isMain);
         return activePos;
     }
+
+    private static void tickAmbientBoiling(Minecraft mc) {
+        BlockPos playerPos = mc.player.blockPosition();
+
+        for (int x = -6; x <= 6; x++) {
+            for (int y = -3; y <= 3; y++) {
+                for (int z = -6; z <= 6; z++) {
+                    BlockPos targetPos = playerPos.offset(x, y, z);
+                    BlockState state = mc.level.getBlockState(targetPos);
+
+                    if (CauldronHeatLogic.isFullWaterCauldron(state) && CauldronHeatLogic.isHeated(mc.level, targetPos)) {
+                        spawnBoilingEffects(mc, targetPos);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void spawnBoilingEffects(Minecraft mc, BlockPos targetPos) {
+        if (mc.level == null) {
+            return;
+        }
+
+        if (mc.level.random.nextInt(3) == 0) {
+            mc.level.addParticle(
+                ParticleTypes.BUBBLE_POP,
+                targetPos.getX() + 0.25 + mc.level.random.nextDouble() * 0.5,
+                targetPos.getY() + 0.9 + mc.level.random.nextDouble() * 0.08,
+                targetPos.getZ() + 0.25 + mc.level.random.nextDouble() * 0.5,
+                0.0,
+                0.03 + mc.level.random.nextDouble() * 0.02,
+                0.0
+            );
+        }
+
+        if (mc.level.random.nextInt(5) == 0) {
+            mc.level.addParticle(
+                ParticleTypes.SPLASH,
+                targetPos.getX() + 0.25 + mc.level.random.nextDouble() * 0.5,
+                targetPos.getY() + 0.88,
+                targetPos.getZ() + 0.25 + mc.level.random.nextDouble() * 0.5,
+                (mc.level.random.nextDouble() - 0.5) * 0.02,
+                0.05,
+                (mc.level.random.nextDouble() - 0.5) * 0.02
+            );
+        }
+
+        if (ambientBoilSoundCooldown <= 0 && mc.level.random.nextInt(8) == 0) {
+            mc.level.playLocalSound(
+                targetPos.getX() + 0.5,
+                targetPos.getY() + 0.6,
+                targetPos.getZ() + 0.5,
+                SoundEvents.WATER_AMBIENT,
+                mc.player.getSoundSource(),
+                0.2f,
+                0.75f + (mc.level.random.nextFloat() * 0.15f),
+                false
+            );
+            ambientBoilSoundCooldown = 24;
+        }
+    }
 }
+
+
+
+
+
+

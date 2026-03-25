@@ -39,6 +39,7 @@ import org.vmstudio.visor.api.VisorAPI;
 import org.vmstudio.stickalchemy.core.client.ExampleAddonClient;
 import org.vmstudio.stickalchemy.core.client.StickAlchemyLogic;
 import org.vmstudio.stickalchemy.core.common.AlchemyNetworking;
+import org.vmstudio.stickalchemy.core.common.CauldronHeatLogic;
 import org.vmstudio.stickalchemy.core.server.AlchemyServerState;
 import org.vmstudio.stickalchemy.core.server.ExampleAddonServer;
 import org.vmstudio.stickalchemy.core.server.PotionRecipeLogic;
@@ -196,7 +197,13 @@ public class ExampleMod implements ModInitializer {
                 );
                 List<ItemDisplay> currentItems = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
 
-                if (currentItems.size() < 9 && !stack.isEmpty() && PotionBrewing.isIngredient(stack) && level.getBlockState(pos).is(Blocks.WATER_CAULDRON)) {
+                BlockState cauldronState = level.getBlockState(pos);
+
+                if (currentItems.size() < 9
+                    && !stack.isEmpty()
+                    && PotionBrewing.isIngredient(stack)
+                    && CauldronHeatLogic.isFullWaterCauldron(cauldronState)
+                    && CauldronHeatLogic.isHeated(level, pos)) {
                     ItemStack placedItem = stack.copy();
                     placedItem.setCount(1);
                     stack.shrink(1);
@@ -260,7 +267,7 @@ public class ExampleMod implements ModInitializer {
             server.execute(() -> {
                 Level level = player.level();
                 BlockState state = level.getBlockState(pos);
-                if (state.is(Blocks.WATER_CAULDRON)) {
+                if (state.is(Blocks.WATER_CAULDRON) && CauldronHeatLogic.isHeated(level, pos)) {
                     AABB strictInnerCauldron = new AABB(
                         pos.getX() + 0.1, pos.getY(), pos.getZ() + 0.1,
                         pos.getX() + 0.9, pos.getY() + 1.0, pos.getZ() + 0.9
@@ -309,6 +316,15 @@ public class ExampleMod implements ModInitializer {
                 BlockState state = level.getBlockState(pos);
 
                 if (state.is(Blocks.WATER_CAULDRON)) {
+                    AABB strictInnerCauldron = new AABB(
+                        pos.getX() + 0.1, pos.getY(), pos.getZ() + 0.1,
+                        pos.getX() + 0.9, pos.getY() + 1.0, pos.getZ() + 0.9
+                    );
+                    List<ItemDisplay> currentItems = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+                    if (!currentItems.isEmpty()) {
+                        return;
+                    }
+
                     InteractionHand hand = isMainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
                     ItemStack stack = player.getItemInHand(hand);
                     if (stack.is(Items.GLASS_BOTTLE)) {
