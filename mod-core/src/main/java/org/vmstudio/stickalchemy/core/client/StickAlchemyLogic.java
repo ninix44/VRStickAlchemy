@@ -37,6 +37,7 @@ public class StickAlchemyLogic {
         void sendScoopPotion(BlockPos pos, boolean isMainHand);
         void sendPlaceIngredient(BlockPos pos, boolean isMainHand);
         void sendExtractIngredient(BlockPos pos, boolean isMainHand);
+        void sendStirCauldron(BlockPos pos, float direction);
     }
 
     public static NetworkBridge bridge;
@@ -52,6 +53,7 @@ public class StickAlchemyLogic {
     private static int scoopCooldown = 0;
     private static int extractCooldown = 0;
     private static int ambientBoilSoundCooldown = 0;
+    private static int stirSyncCooldown = 0;
 
     private static int mainHandHoldTicks = 0;
     private static int offHandHoldTicks = 0;
@@ -82,6 +84,7 @@ public class StickAlchemyLogic {
         if (scoopCooldown > 0) scoopCooldown--;
         if (extractCooldown > 0) extractCooldown--;
         if (ambientBoilSoundCooldown > 0) ambientBoilSoundCooldown--;
+        if (stirSyncCooldown > 0) stirSyncCooldown--;
         if (swirlDebugCooldown > 0) swirlDebugCooldown--;
 
         tickStirVisuals(mc);
@@ -232,7 +235,9 @@ public class StickAlchemyLogic {
 
                         if (isHoldingStick && stickBox.intersects(cauldronStirZone)) {
                             if (speed > 0.005) {
-                                updateStirVisual(targetPos, state, stickTipPos, stickTipPos.subtract(lastPos));
+                                Vec3 motion = stickTipPos.subtract(lastPos);
+                                updateStirVisual(targetPos, state, stickTipPos, motion);
+                                syncStirMotion(targetPos, stickTipPos, motion);
                                 int progress = stirProgress.getOrDefault(targetPos, 0) + 1;
                                 stirProgress.put(targetPos, progress);
 
@@ -334,6 +339,30 @@ public class StickAlchemyLogic {
             ));
             swirlDebugCooldown = 20;
         }
+    }
+
+    private static void syncStirMotion(BlockPos cauldronPos, Vec3 stickTipPos, Vec3 motion) {
+        if (bridge == null || stirSyncCooldown > 0) {
+            return;
+        }
+
+        double direction = calculateAngularImpulse(cauldronPos, stickTipPos, motion);
+        if (Math.abs(direction) < 0.0007) {
+            return;
+        }
+
+        bridge.sendStirCauldron(cauldronPos, (float) clamp(direction * 20.0, -1.0, 1.0));
+        stirSyncCooldown = 2;
+    }
+
+    private static double calculateAngularImpulse(BlockPos cauldronPos, Vec3 stickTipPos, Vec3 motion) {
+        Vec3 center = new Vec3(cauldronPos.getX() + 0.5, stickTipPos.y, cauldronPos.getZ() + 0.5);
+        Vec3 radial = new Vec3(
+            stickTipPos.x - center.x,
+            0.0,
+            stickTipPos.z - center.z
+        );
+        return radial.x * motion.z - radial.z * motion.x;
     }
 
     private static double clamp(double value, double min, double max) {

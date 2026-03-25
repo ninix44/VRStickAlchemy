@@ -12,15 +12,12 @@ import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.FloatTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Display.ItemDisplay;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -41,11 +38,11 @@ import org.vmstudio.stickalchemy.core.client.StickAlchemyLogic;
 import org.vmstudio.stickalchemy.core.common.AlchemyNetworking;
 import org.vmstudio.stickalchemy.core.common.CauldronHeatLogic;
 import org.vmstudio.stickalchemy.core.server.AlchemyServerState;
+import org.vmstudio.stickalchemy.core.server.CauldronIngredientOrbitLogic;
 import org.vmstudio.stickalchemy.core.server.ExampleAddonServer;
 import org.vmstudio.stickalchemy.core.server.PotionRecipeLogic;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 public class ExampleMod implements ModInitializer {
@@ -69,65 +66,11 @@ public class ExampleMod implements ModInitializer {
             }
             display.discard();
         }
+        CauldronIngredientOrbitLogic.clearOrbit(pos);
     }
 
     public static void updateCauldronGrid(Level level, BlockPos pos) {
-        AABB strictInnerCauldron = new AABB(
-            pos.getX() + 0.1, pos.getY(), pos.getZ() + 0.1,
-            pos.getX() + 0.9, pos.getY() + 1.0, pos.getZ() + 0.9
-        );
-
-        List<ItemDisplay> items = level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
-        items.sort(Comparator.comparingInt(Entity::getId));
-
-        int n = Math.min(items.size(), 9);
-        if (n == 0) return;
-
-        for (int i = 0; i < n; i++) {
-            ItemDisplay display = items.get(i);
-            double offsetX = 0;
-            double offsetZ = 0;
-            float scale = 0.25f; // change
-
-            if (n == 1) {
-                scale = 0.5f;
-            } else if (n == 2) {
-                scale = 0.35f;
-                offsetX = (i == 0) ? -0.15 : 0.15;
-            } else if (n == 3) {
-                scale = 0.3f;
-                offsetX = (i - 1) * 0.2;
-            } else if (n == 4) {
-                scale = 0.25f;
-                offsetX = (i % 2 == 0) ? -0.15 : 0.15;
-                offsetZ = (i < 2) ? -0.15 : 0.15;
-            } else {
-                scale = 0.2f;
-                int row = i / 3;
-                int col = i % 3;
-                offsetX = (col - 1) * 0.2;
-                offsetZ = (row - 1) * 0.2;
-            }
-
-            display.setXRot(-90f);
-            display.setYRot(0f);
-            display.teleportTo(pos.getX() + 0.5 + offsetX, pos.getY() + 0.95, pos.getZ() + 0.5 + offsetZ);
-
-            CompoundTag tag = new CompoundTag();
-            display.saveWithoutId(tag);
-
-            tag.putString("item_display", "fixed");
-
-            CompoundTag transform = tag.contains("transformation") ? tag.getCompound("transformation") : new CompoundTag();
-            ListTag scaleList = new ListTag();
-            scaleList.add(FloatTag.valueOf(scale));
-            scaleList.add(FloatTag.valueOf(scale));
-            scaleList.add(FloatTag.valueOf(scale));
-            transform.put("scale", scaleList);
-            tag.put("transformation", transform);
-
-            display.load(tag);
-        }
+        CauldronIngredientOrbitLogic.updateCauldronLayout(level, pos);
     }
 
     private void broadcastCauldronColor(ServerLevel level, BlockPos pos, int color) {
@@ -150,6 +93,7 @@ public class ExampleMod implements ModInitializer {
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+                CauldronIngredientOrbitLogic.tickOrbits();
                 for (AlchemyServerState.CauldronData data : AlchemyServerState.BREWED_CAULDRONS.values()) {
                     BlockState state = data.level.getBlockState(data.pos);
 
@@ -178,6 +122,17 @@ public class ExampleMod implements ModInitializer {
                         broadcastCauldronColor(data.level, data.pos, -1);
                     }
                 }
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(AlchemyNetworking.STIR_CAULDRON_PACKET, (server, player, handler, buf, responseSender) -> {
+            BlockPos pos = buf.readBlockPos();
+            float direction = buf.readFloat();
+
+            server.execute(() -> {
+                if (player.level() instanceof ServerLevel serverLevel) {
+                    CauldronIngredientOrbitLogic.applyStirImpulse(serverLevel, pos, direction);
+                }
+            });
         });
 
         ServerPlayNetworking.registerGlobalReceiver(AlchemyNetworking.PLACE_INGREDIENT_PACKET, (server, player, handler, buf, responseSender) -> {
@@ -256,6 +211,7 @@ public class ExampleMod implements ModInitializer {
                     }
                     display.discard();
                 }
+                CauldronIngredientOrbitLogic.clearOrbit(pos);
                 updateCauldronGrid(level, pos);
             });
         });
@@ -283,6 +239,7 @@ public class ExampleMod implements ModInitializer {
                             }
                             display.discard();
                         }
+                        CauldronIngredientOrbitLogic.clearOrbit(pos);
 
                         ItemStack resultPotion = PotionRecipeLogic.calculateResult(ingredients);
 
@@ -431,6 +388,14 @@ public class ExampleMod implements ModInitializer {
                     buf.writeBlockPos(pos);
                     buf.writeBoolean(isMainHand);
                     ClientPlayNetworking.send(AlchemyNetworking.EXTRACT_INGREDIENT_PACKET, buf);
+                }
+
+                @Override
+                public void sendStirCauldron(BlockPos pos, float direction) {
+                    FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+                    buf.writeBlockPos(pos);
+                    buf.writeFloat(direction);
+                    ClientPlayNetworking.send(AlchemyNetworking.STIR_CAULDRON_PACKET, buf);
                 }
             };
 

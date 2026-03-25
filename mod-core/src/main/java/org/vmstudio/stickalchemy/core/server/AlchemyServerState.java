@@ -23,5 +23,19 @@ public class AlchemyServerState {
         }
     }
 
+    public static class CauldronOrbitData {
+        public final ServerLevel level;
+        public final BlockPos pos;
+        public double orbitAngle;
+        public double angularVelocity;
+        public double orbitStrength;
+
+        public CauldronOrbitData(ServerLevel level, BlockPos pos) {
+            this.level = level;
+            this.pos = pos;
+        }
+    }
+
     public static final Map<BlockPos, CauldronData> BREWED_CAULDRONS = new ConcurrentHashMap<>();
+    public static final Map<BlockPos, CauldronOrbitData> CAULDRON_ORBITS = new ConcurrentHashMap<>();
 }
