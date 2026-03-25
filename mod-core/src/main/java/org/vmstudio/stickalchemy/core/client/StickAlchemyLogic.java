@@ -157,7 +157,7 @@ public class StickAlchemyLogic {
                                 targetPos.getX() + 0.1, targetPos.getY(), targetPos.getZ() + 0.1,
                                 targetPos.getX() + 0.9, targetPos.getY() + 1.0, targetPos.getZ() + 0.9
                             );
-                            List<ItemDisplay> currentItems = mc.level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+                            List<ItemDisplay> currentItems = mc.level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron);
 
                             if (currentItems.size() < 9) {
                                 if (speed < 0.05) {
@@ -191,7 +191,7 @@ public class StickAlchemyLogic {
                                 targetPos.getX(), targetPos.getY(), targetPos.getZ(),
                                 targetPos.getX() + 1.0, targetPos.getY() + 1.0, targetPos.getZ() + 1.0
                             );
-                            List<ItemDisplay> currentItems = mc.level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient"));
+                            List<ItemDisplay> currentItems = mc.level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron);
 
                             if (!currentItems.isEmpty()) {
                                 return activePos;
@@ -298,6 +298,7 @@ public class StickAlchemyLogic {
         }
     }
 }
+
 
 
 
