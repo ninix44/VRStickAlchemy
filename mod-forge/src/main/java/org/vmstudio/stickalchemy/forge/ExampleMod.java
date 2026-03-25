@@ -233,8 +233,7 @@ public class ExampleMod {
     private void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {
             serverTicks++;
-            if (serverTicks % 10 == 0) {
-                for (AlchemyServerState.CauldronData data : AlchemyServerState.BREWED_CAULDRONS.values()) {
+            for (AlchemyServerState.CauldronData data : AlchemyServerState.BREWED_CAULDRONS.values()) {
                     BlockState state = data.level.getBlockState(data.pos);
 
                     if (state.is(Blocks.WATER_CAULDRON)) {
@@ -262,7 +261,6 @@ public class ExampleMod {
                         CHANNEL.send(PacketDistributor.ALL.noArg(), new SyncCauldronColorPacket(data.pos, -1));
                     }
                 }
-            }
         }
     }
 

@@ -150,7 +150,6 @@ public class ExampleMod implements ModInitializer {
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            if (server.getTickCount() % 10 == 0) {
                 for (AlchemyServerState.CauldronData data : AlchemyServerState.BREWED_CAULDRONS.values()) {
                     BlockState state = data.level.getBlockState(data.pos);
 
@@ -179,7 +178,6 @@ public class ExampleMod implements ModInitializer {
                         broadcastCauldronColor(data.level, data.pos, -1);
                     }
                 }
-            }
         });
 
         ServerPlayNetworking.registerGlobalReceiver(AlchemyNetworking.PLACE_INGREDIENT_PACKET, (server, player, handler, buf, responseSender) -> {
