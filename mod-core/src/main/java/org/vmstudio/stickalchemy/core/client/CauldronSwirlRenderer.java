@@ -21,9 +21,9 @@ import java.util.Map;
 
 public final class CauldronSwirlRenderer {
 
-    private static final float INNER_RADIUS = 0.11f;
-    private static final float OUTER_RADIUS = 0.30f;
-    private static final int BAND_SEGMENTS = 20;
+    private static final float INNER_RADIUS = 0.12f;
+    private static final float OUTER_RADIUS = 0.295f;
+    private static final int BAND_SEGMENTS = 36;
     private static int renderDebugCooldown = 0;
 
     private CauldronSwirlRenderer() {
@@ -102,51 +102,51 @@ public final class CauldronSwirlRenderer {
             poseStack,
             surfaceY + 0.010f,
             energy,
-            red,
-            green,
-            blue,
-            flowX,
-            flowZ,
+            Mth.lerp(0.18f, red, 0.82f),
+            Mth.lerp(0.22f, green, 0.78f),
+            Mth.lerp(0.30f, blue, 0.82f),
+            flowX * 0.72f,
+            flowZ * 0.72f,
             spinAngle,
             spinSign,
             time,
             1.0f,
-            0.09f,
-            0.78f
+            0.072f,
+            0.52f
         );
         renderBand(
             builder,
             poseStack,
-            surfaceY + 0.018f,
-            energy * 0.9f,
-            Math.min(1.0f, red * 1.20f + 0.10f),
-            Math.min(1.0f, green * 1.20f + 0.10f),
-            Math.min(1.0f, blue * 1.25f + 0.16f),
-            flowX * 0.85f,
-            flowZ * 0.85f,
-            -spinAngle * 0.75f,
-            -spinSign,
-            time + 0.8f,
-            0.85f,
-            0.07f,
-            0.60f
-        );
-        renderBand(
-            builder,
-            poseStack,
-            surfaceY + 0.026f,
-            energy * 0.75f,
-            0.92f,
-            0.98f,
-            1.00f,
-            flowX * 1.10f,
-            flowZ * 1.10f,
-            spinAngle * 1.25f,
+            surfaceY + 0.017f,
+            energy * 0.82f,
+            Math.min(1.0f, red * 1.08f + 0.08f),
+            Math.min(1.0f, green * 1.08f + 0.10f),
+            Math.min(1.0f, blue * 1.12f + 0.14f),
+            flowX * 0.62f,
+            flowZ * 0.62f,
+            spinAngle * 0.78f,
             spinSign,
-            time + 1.6f,
-            0.70f,
-            0.05f,
-            0.46f
+            time + 0.55f,
+            0.88f,
+            0.058f,
+            0.40f
+        );
+        renderBand(
+            builder,
+            poseStack,
+            surfaceY + 0.023f,
+            energy * 0.62f,
+            0.90f,
+            0.96f,
+            0.99f,
+            flowX * 0.45f,
+            flowZ * 0.45f,
+            spinAngle * 0.54f,
+            spinSign,
+            time + 1.05f,
+            0.76f,
+            0.042f,
+            0.24f
         );
         BufferUploader.drawWithShader(builder.end());
 
@@ -173,25 +173,25 @@ public final class CauldronSwirlRenderer {
         float minRadius = INNER_RADIUS * radiusScale;
         float maxRadius = OUTER_RADIUS * radiusScale;
         float directionalAngle = (float) Math.atan2(flowZ, flowX + 1.0e-4f);
-        float directionalStrength = Mth.clamp((Math.abs(flowX) + Math.abs(flowZ)) * 2.2f, 0.0f, 1.0f);
+        float directionalStrength = Mth.clamp((Math.abs(flowX) + Math.abs(flowZ)) * 1.45f, 0.0f, 1.0f);
 
         for (int i = 0; i < BAND_SEGMENTS; i++) {
             float t0 = i / (float) BAND_SEGMENTS;
             float t1 = (i + 1) / (float) BAND_SEGMENTS;
 
-            float angle0 = swirlAngle * 2.2f + time * (1.6f + energy) * spinSign + t0 * Mth.TWO_PI * 1.65f;
-            float angle1 = swirlAngle * 2.2f + time * (1.6f + energy) * spinSign + t1 * Mth.TWO_PI * 1.65f;
+            float angle0 = swirlAngle * 1.55f + time * (0.95f + energy * 0.55f) * spinSign + t0 * Mth.TWO_PI * 1.32f;
+            float angle1 = swirlAngle * 1.55f + time * (0.95f + energy * 0.55f) * spinSign + t1 * Mth.TWO_PI * 1.32f;
 
-            float radius0 = Mth.lerp(t0, minRadius, maxRadius) + Mth.sin(time * 3.4f + t0 * 14.0f) * 0.010f * energy;
-            float radius1 = Mth.lerp(t1, minRadius, maxRadius) + Mth.sin(time * 3.4f + t1 * 14.0f) * 0.010f * energy;
+            float radius0 = Mth.lerp(t0, minRadius, maxRadius) + Mth.sin(time * 1.8f + t0 * 5.8f) * 0.0045f * energy;
+            float radius1 = Mth.lerp(t1, minRadius, maxRadius) + Mth.sin(time * 1.8f + t1 * 5.8f) * 0.0045f * energy;
 
-            float push0 = Mth.sin(angle0 - directionalAngle) * directionalStrength * 0.055f * energy;
-            float push1 = Mth.sin(angle1 - directionalAngle) * directionalStrength * 0.055f * energy;
+            float push0 = Mth.sin(angle0 - directionalAngle) * directionalStrength * 0.026f * energy;
+            float push1 = Mth.sin(angle1 - directionalAngle) * directionalStrength * 0.026f * energy;
 
-            float centerX0 = 0.5f + Mth.cos(angle0) * radius0 + flowX * 0.16f * energy + Mth.cos(directionalAngle) * push0;
-            float centerZ0 = 0.5f + Mth.sin(angle0) * radius0 + flowZ * 0.16f * energy + Mth.sin(directionalAngle) * push0;
-            float centerX1 = 0.5f + Mth.cos(angle1) * radius1 + flowX * 0.16f * energy + Mth.cos(directionalAngle) * push1;
-            float centerZ1 = 0.5f + Mth.sin(angle1) * radius1 + flowZ * 0.16f * energy + Mth.sin(directionalAngle) * push1;
+            float centerX0 = 0.5f + Mth.cos(angle0) * radius0 + flowX * 0.10f * energy + Mth.cos(directionalAngle) * push0;
+            float centerZ0 = 0.5f + Mth.sin(angle0) * radius0 + flowZ * 0.10f * energy + Mth.sin(directionalAngle) * push0;
+            float centerX1 = 0.5f + Mth.cos(angle1) * radius1 + flowX * 0.10f * energy + Mth.cos(directionalAngle) * push1;
+            float centerZ1 = 0.5f + Mth.sin(angle1) * radius1 + flowZ * 0.10f * energy + Mth.sin(directionalAngle) * push1;
 
             float tangentX0 = -Mth.sin(angle0) * bandWidth;
             float tangentZ0 = Mth.cos(angle0) * bandWidth;
@@ -200,21 +200,29 @@ public final class CauldronSwirlRenderer {
 
             float y0 = surfaceY + waveHeight(centerX0, centerZ0, flowX, flowZ, time + t0, energy);
             float y1 = surfaceY + waveHeight(centerX1, centerZ1, flowX, flowZ, time + t1, energy);
-            float alpha = Mth.clamp((1.0f - t0 * 0.55f) * alphaScale * energy, 0.0f, 0.95f);
+            float fade = 1.0f - smoothstep(0.0f, 1.0f, t0);
+            float alpha = Mth.clamp((0.35f + fade * 0.65f) * alphaScale * energy, 0.0f, 0.78f);
 
             addVertex(builder, poseStack, centerX0 - tangentX0, y0, centerZ0 - tangentZ0, red, green, blue, alpha);
             addVertex(builder, poseStack, centerX0 + tangentX0, y0, centerZ0 + tangentZ0, red, green, blue, alpha);
-            addVertex(builder, poseStack, centerX1 + tangentX1, y1, centerZ1 + tangentZ1, red, green, blue, alpha * 0.92f);
-            addVertex(builder, poseStack, centerX1 - tangentX1, y1, centerZ1 - tangentZ1, red, green, blue, alpha * 0.92f);
+            addVertex(builder, poseStack, centerX1 + tangentX1, y1, centerZ1 + tangentZ1, red, green, blue, alpha * 0.96f);
+            addVertex(builder, poseStack, centerX1 - tangentX1, y1, centerZ1 - tangentZ1, red, green, blue, alpha * 0.96f);
         }
     }
 
     private static float waveHeight(float x, float z, float flowX, float flowZ, float time, float energy) {
         float localX = x - 0.5f;
         float localZ = z - 0.5f;
-        float directionalWave = Mth.sin((localX * flowX * 20.0f + localZ * flowZ * 20.0f) + time * 4.0f);
-        float orbitalWave = Mth.cos((localX * 14.0f - localZ * 14.0f) + time * 3.2f);
-        return (directionalWave * 0.016f + orbitalWave * 0.010f) * energy;
+        float radial = Mth.sqrt(localX * localX + localZ * localZ);
+        float directionalWave = Mth.sin((localX * flowX * 10.0f + localZ * flowZ * 10.0f) + time * 1.8f);
+        float orbitalWave = Mth.cos((radial * 10.0f) - time * 1.45f);
+        float softCrossWave = Mth.sin((localX + localZ) * 5.2f + time * 1.2f);
+        return (directionalWave * 0.0065f + orbitalWave * 0.0045f + softCrossWave * 0.0028f) * energy;
+    }
+
+    private static float smoothstep(float edge0, float edge1, float value) {
+        float t = Mth.clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
     }
 
     private static void addVertex(
