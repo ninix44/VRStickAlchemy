@@ -3,6 +3,7 @@ package org.vmstudio.stickalchemy.core.client;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Display.ItemDisplay;
@@ -10,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LayeredCauldronBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -40,6 +42,7 @@ public class StickAlchemyLogic {
     public static NetworkBridge bridge;
 
     public static final Map<BlockPos, Integer> CAULDRON_COLORS = new HashMap<>();
+    public static final Map<BlockPos, StirVisualState> STIR_VISUALS = new HashMap<>();
 
     private static final Map<BlockPos, Integer> stirProgress = new HashMap<>();
 
@@ -54,6 +57,23 @@ public class StickAlchemyLogic {
     private static int offHandHoldTicks = 0;
     private static final int TARGET_HOLD_TIME = 30;
     private static final int TARGET_STIR_PROGRESS = 120;
+    private static final double MIN_STIR_VISUAL_SPEED = 0.004;
+    private static final boolean DEBUG_SWIRL_CHAT = false;
+    private static int swirlDebugCooldown = 0;
+
+    public static class StirVisualState {
+        public double flowX;
+        public double flowZ;
+        public double spinVelocity;
+        public double swirlAngle;
+        public double energy;
+        public int waterLevel;
+    }
+
+    public static void resetCauldronStirState(BlockPos pos) {
+        stirProgress.remove(pos);
+        STIR_VISUALS.remove(pos);
+    }
 
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
@@ -62,7 +82,9 @@ public class StickAlchemyLogic {
         if (scoopCooldown > 0) scoopCooldown--;
         if (extractCooldown > 0) extractCooldown--;
         if (ambientBoilSoundCooldown > 0) ambientBoilSoundCooldown--;
+        if (swirlDebugCooldown > 0) swirlDebugCooldown--;
 
+        tickStirVisuals(mc);
         tickAmbientBoiling(mc);
 
         VRLocalPlayer vrPlayer = VisorAPI.client().getVRLocalPlayer();
@@ -175,6 +197,7 @@ public class StickAlchemyLogic {
                                     }
 
                                     if (ticks >= TARGET_HOLD_TIME) {
+                                        resetCauldronStirState(targetPos);
                                         if (bridge != null) bridge.sendPlaceIngredient(targetPos, isMain);
                                         VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 200f, 0.5f, 0.1f);
                                         mc.player.playSound(SoundEvents.SPLASH_POTION_THROW, 0.4f, 1.2f);
@@ -199,6 +222,7 @@ public class StickAlchemyLogic {
                             }
 
                             if (bridge != null) {
+                                resetCauldronStirState(targetPos);
                                 bridge.sendScoopPotion(targetPos, isMain);
                                 VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 200f, 0.5f, 0.1f);
                                 scoopCooldown = 20;
@@ -208,6 +232,7 @@ public class StickAlchemyLogic {
 
                         if (isHoldingStick && stickBox.intersects(cauldronStirZone)) {
                             if (speed > 0.005) {
+                                updateStirVisual(targetPos, state, stickTipPos, stickTipPos.subtract(lastPos));
                                 int progress = stirProgress.getOrDefault(targetPos, 0) + 1;
                                 stirProgress.put(targetPos, progress);
 
@@ -223,7 +248,7 @@ public class StickAlchemyLogic {
                                 }
                                 if (progress >= TARGET_STIR_PROGRESS) {
                                     VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 400f, 1.0f, 0.4f);
-                                    stirProgress.remove(targetPos);
+                                    resetCauldronStirState(targetPos);
                                     if (bridge != null) bridge.sendFinishStir(targetPos);
                                 }
                             }
@@ -252,6 +277,77 @@ public class StickAlchemyLogic {
                     }
                 }
             }
+        }
+    }
+
+    private static void tickStirVisuals(Minecraft mc) {
+        STIR_VISUALS.entrySet().removeIf(entry -> {
+            BlockState state = mc.level.getBlockState(entry.getKey());
+            if (!state.is(Blocks.WATER_CAULDRON)) {
+                return true;
+            }
+
+            StirVisualState visual = entry.getValue();
+            visual.flowX *= 0.9;
+            visual.flowZ *= 0.9;
+            visual.spinVelocity *= 0.92;
+            visual.swirlAngle += visual.spinVelocity;
+            visual.energy *= 0.94;
+            visual.waterLevel = state.getValue(LayeredCauldronBlock.LEVEL);
+
+            return visual.energy < 0.025 && Math.abs(visual.spinVelocity) < 0.002
+                && Math.abs(visual.flowX) < 0.002 && Math.abs(visual.flowZ) < 0.002;
+        });
+    }
+
+    private static void updateStirVisual(BlockPos cauldronPos, BlockState state, Vec3 stickTipPos, Vec3 motion) {
+        double horizontalSpeed = Math.sqrt(motion.x * motion.x + motion.z * motion.z);
+        if (horizontalSpeed < MIN_STIR_VISUAL_SPEED) {
+            return;
+        }
+
+        StirVisualState visual = STIR_VISUALS.computeIfAbsent(cauldronPos, ignored -> new StirVisualState());
+        Vec3 center = new Vec3(cauldronPos.getX() + 0.5, stickTipPos.y, cauldronPos.getZ() + 0.5);
+        Vec3 radial = new Vec3(
+            stickTipPos.x - center.x,
+            0.0,
+            stickTipPos.z - center.z
+        );
+
+        double angularImpulse = radial.x * motion.z - radial.z * motion.x;
+        visual.flowX = clamp(visual.flowX * 0.72 + motion.x * 6.4, -0.42, 0.42);
+        visual.flowZ = clamp(visual.flowZ * 0.72 + motion.z * 6.4, -0.42, 0.42);
+        visual.spinVelocity = clamp(visual.spinVelocity * 0.65 + angularImpulse * 12.0, -0.60, 0.60);
+        visual.energy = clamp(Math.max(visual.energy * 0.88, horizontalSpeed * 26.0 + Math.abs(angularImpulse) * 22.0), 0.0, 2.4);
+        visual.waterLevel = state.getValue(LayeredCauldronBlock.LEVEL);
+
+        if (DEBUG_SWIRL_CHAT && swirlDebugCooldown <= 0) {
+            debugSwirlChat(String.format(
+                "stir %d %d %d | fx=%.3f fz=%.3f spin=%.3f e=%.3f",
+                cauldronPos.getX(),
+                cauldronPos.getY(),
+                cauldronPos.getZ(),
+                visual.flowX,
+                visual.flowZ,
+                visual.spinVelocity,
+                visual.energy
+            ));
+            swirlDebugCooldown = 20;
+        }
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    static void debugSwirlChat(String message) {
+        if (!DEBUG_SWIRL_CHAT) {
+            return;
+        }
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.displayClientMessage(Component.literal("[Alchemy] " + message), false);
         }
     }
 

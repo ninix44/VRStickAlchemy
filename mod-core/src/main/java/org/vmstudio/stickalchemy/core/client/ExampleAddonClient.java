@@ -1,13 +1,15 @@
 package org.vmstudio.stickalchemy.core.client;
 
-import org.vmstudio.visor.api.VisorAPI;
-import org.vmstudio.visor.api.common.addon.VisorAddon;
-import org.vmstudio.stickalchemy.core.client.overlays.VROverlayExample;
-import org.vmstudio.stickalchemy.core.client.overlays.VROverlayTemplateExample;
-import org.vmstudio.stickalchemy.core.common.VisorExample;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.vmstudio.stickalchemy.core.client.overlays.VROverlayExample;
+import org.vmstudio.stickalchemy.core.client.overlays.VROverlayTemplateExample;
+import org.vmstudio.stickalchemy.core.common.VisorExample;
+import org.vmstudio.visor.api.ModLoader;
+import org.vmstudio.visor.api.VisorAPI;
+import org.vmstudio.visor.api.client.render.RenderPipelineStage;
+import org.vmstudio.visor.api.common.addon.VisorAddon;
 
 import java.util.List;
 
@@ -30,6 +32,11 @@ public class ExampleAddonClient implements VisorAddon {
                                 */
                 )
             );
+
+        ModLoader.get().addToRenderPipeline(
+            RenderPipelineStage.AFTER_TRANSLUCENT,
+            CauldronSwirlRenderer::renderSwirls
+        );
     }
 
     @Override
