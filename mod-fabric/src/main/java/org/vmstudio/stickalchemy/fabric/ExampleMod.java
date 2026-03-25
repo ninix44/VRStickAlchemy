@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.ColorProviderRegistry;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.core.BlockPos;
@@ -18,6 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Display.ItemDisplay;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -46,6 +48,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ExampleMod implements ModInitializer {
+
+    private static boolean hasIngredients(Level level, BlockPos pos) {
+        AABB strictInnerCauldron = new AABB(
+            pos.getX() + 0.1, pos.getY(), pos.getZ() + 0.1,
+            pos.getX() + 0.9, pos.getY() + 1.0, pos.getZ() + 0.9
+        );
+        return !level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient")).isEmpty();
+    }
 
     public static void dropCauldronIngredients(Level level, BlockPos pos) {
         AABB strictInnerCauldron = new AABB(
@@ -84,6 +94,19 @@ public class ExampleMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+            BlockPos pos = hitResult.getBlockPos();
+            BlockState state = world.getBlockState(pos);
+            ItemStack held = player.getItemInHand(hand);
+
+            if (state.is(Blocks.WATER_CAULDRON)
+                && hasIngredients(world, pos)
+                && (held.is(Items.GLASS_BOTTLE) || held.is(Items.BUCKET))) {
+                return InteractionResult.FAIL;
+            }
+
+            return InteractionResult.PASS;
+        });
 
         PlayerBlockBreakEvents.BEFORE.register((world, player, pos, state, blockEntity) -> {
             if (state.is(Blocks.WATER_CAULDRON)) {

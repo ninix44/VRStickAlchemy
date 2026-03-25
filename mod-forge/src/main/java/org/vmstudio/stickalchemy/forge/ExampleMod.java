@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.Display.ItemDisplay;
@@ -25,6 +26,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.client.event.RegisterColorHandlersEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -60,6 +62,14 @@ public class ExampleMod {
     );
 
     private static int serverTicks = 0;
+
+    private static boolean hasIngredients(Level level, BlockPos pos) {
+        AABB strictInnerCauldron = new AABB(
+            pos.getX() + 0.1, pos.getY(), pos.getZ() + 0.1,
+            pos.getX() + 0.9, pos.getY() + 1.0, pos.getZ() + 0.9
+        );
+        return !level.getEntitiesOfClass(ItemDisplay.class, strictInnerCauldron, e -> e.getTags().contains("alchemy_ingredient")).isEmpty();
+    }
 
     public static void dropCauldronIngredients(Level level, BlockPos pos) {
         AABB strictInnerCauldron = new AABB(
@@ -120,6 +130,7 @@ public class ExampleMod {
 
         MinecraftForge.EVENT_BUS.addListener(this::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(this::onBlockBreak);
+        MinecraftForge.EVENT_BUS.addListener(this::onRightClickBlock);
 
         if (!ModLoader.get().isDedicatedServer()) {
             FMLJavaModLoadingContext.get().getModEventBus().addListener((RegisterColorHandlersEvent.Block event) -> {
@@ -181,6 +192,20 @@ public class ExampleMod {
 
     private void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase == TickEvent.Phase.END) StickAlchemyLogic.tick();
+    }
+
+    private void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        Level level = event.getLevel();
+        BlockPos pos = event.getPos();
+        BlockState state = level.getBlockState(pos);
+        ItemStack held = event.getItemStack();
+
+        if (state.is(Blocks.WATER_CAULDRON)
+            && hasIngredients(level, pos)
+            && (held.is(Items.GLASS_BOTTLE) || held.is(Items.BUCKET))) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+        }
     }
 
     private void onServerTick(TickEvent.ServerTickEvent event) {
