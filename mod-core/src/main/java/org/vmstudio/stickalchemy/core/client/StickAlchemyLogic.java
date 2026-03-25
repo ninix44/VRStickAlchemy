@@ -53,6 +53,7 @@ public class StickAlchemyLogic {
     private static int mainHandHoldTicks = 0;
     private static int offHandHoldTicks = 0;
     private static final int TARGET_HOLD_TIME = 30;
+    private static final int TARGET_STIR_PROGRESS = 120;
 
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
@@ -220,7 +221,7 @@ public class StickAlchemyLogic {
                                         stickTipPos.z + (mc.level.random.nextDouble() - 0.5) * 0.2,
                                         (mc.level.random.nextDouble() - 0.5) * 0.2, 0.1, (mc.level.random.nextDouble() - 0.5) * 0.2);
                                 }
-                                if (progress >= 35) {
+                                if (progress >= TARGET_STIR_PROGRESS) {
                                     VisorAPI.client().getInputManager().triggerHapticPulse(vrHand, 400f, 1.0f, 0.4f);
                                     stirProgress.remove(targetPos);
                                     if (bridge != null) bridge.sendFinishStir(targetPos);
