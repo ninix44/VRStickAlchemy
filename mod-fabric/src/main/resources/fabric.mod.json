@@ -16,7 +16,7 @@
     ]
   },
   "mixins": [
-    "mod.mixins.json"
+    "stickalchemy.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.14.14",

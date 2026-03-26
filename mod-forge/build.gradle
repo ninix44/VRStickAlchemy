@@ -10,7 +10,7 @@ loom {
     accessWidenerPath = project(":mod-core").file("src/main/resources/mod.accesswidener")
 
     forge {
-        mixinConfig "mod.mixins.json"
+        mixinConfig "stickalchemy.mixins.json"
     }
 }
 
